@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ValADAM</title>
+    <script src="metro-sound-manager.js"></script>
+    <style>
+        * {
+            margin: 0; padding: 0;
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #222;
+            color: #fff;
+            overflow: hidden;
+        }
+        #mainWrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            height: 100vh;
+        }
+        #gameContainer {
+            position: relative;
+            width: 843px;
+            height: 276px;
+            overflow: hidden;
+            border: 2px solid #666;
+            background: #111;
+        }
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        #quaiCanvas { z-index: 17; }
+        #ppgCanvas  { z-index: 16; transition: transform 1.8s linear; }
+        #ppdCanvas  { z-index: 15; transition: transform 1.8s linear; }
+
+        #ppgCanvas.closing, #ppdCanvas.closing, #porteDr.closing, #porteGc.closing {
+            transition: transform 2.2s cubic-bezier(0.5, 0.5, 0.5, 0.7);
+        }
+        #ppgCanvas.opening, #ppdCanvas.opening, #porteDr.opening, #porteGc.opening {
+            transition: transform 1.8s cubic-bezier(0.5, 0.9, 0.8, 1.0);
+        }
+        #porteDr, #porteGc {
+            z-index: 11;
+            position: absolute;
+            bottom: 12px; left: 0;
+            width: 610px; height: auto;
+        }
+        #train {
+            position: absolute;
+            bottom: 12px; left: 0;
+            width: 610px; height: auto;
+        }
+
+        #controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 10px;
+        }
+        #speedControl {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #speedSlider {
+            width: 14px;
+            height: 131px;
+            background: linear-gradient(to bottom, #444, #222);
+            border-radius: 7px;
+            position: relative;
+            border: 1px solid #333;
+        }
+        #speedHandle {
+            position: absolute;
+            left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            width: 34px; height: 21px;
+            background: linear-gradient(145deg, #e8e8e8, #a8a8a8);
+            border-radius: 18px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: grab;
+            border: 2px solid #666;
+            z-index: 20;
+        }
+        #speedHandle:active { cursor: grabbing; }
+
+        #speedDisplay {
+            font-size: 14px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:active { transform: scale(0.95); }
+
+        /* Vert au-dessus, rouge en-dessous */
+        .door-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .door-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+        }
+        #openBtn  { background: #0c0; }
+        #closeBtn { background: #c00; }
+
+        /* Bouton freins blanc / gris quand desserrés */
+        #brakeBtn {
+            background: #fff;
+            color: #222;
+            padding: 8px 10px;
+            font-size: 11px;
+            border-radius: 5px;
+            min-width: 44px;
+        }
+        #brakeBtn.released {
+            background: #444;
+            color: #888;
+        }
+
+        #fuBtn {
+            background: #f00;
+            color: #fff;
+            padding: 8px 15px;
+            font-size: 12px;
+        }
+        #fuBtn.active { background: #800; }
+
+        #info {
+            position: absolute;
+            top: 10px; right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #ff0;
+            font-family: monospace;
+        }
+
+        @media screen and (max-width: 900px) and (orientation: landscape) {
+            body { padding: 0; margin: 0; }
+            #mainWrapper {
+                flex-direction: row;
+                padding: 5px;
+                justify-content: center;
+                align-items: center;
+                gap: 8px;
+            }
+            #gameContainer { width: 562px; height: 184px; border-width: 1px; flex-shrink: 0; }
+            #train, #porteDr, #porteGc { width: 413px; bottom: 13px; }
+            #controls { flex-direction: column; margin-top: 0; padding: 6px; gap: 8px; }
+            #speedControl { flex-direction: column; align-items: center; }
+            #speedSlider  { width: 12px; height: 90px; }
+            #speedHandle  { width: 24px; height: 16px; }
+            #speedDisplay { font-size: 11px; min-width: 45px; }
+            .door-btn  { width: 28px; height: 28px; }
+            #brakeBtn  { padding: 6px 8px; font-size: 10px; min-width: 36px; }
+            #fuBtn     { padding: 6px 12px; font-size: 11px; }
+            #info      { top: 3px; right: 3px; padding: 4px 6px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+<div id="mainWrapper">
+    <div id="gameContainer">
+        <canvas id="tunnelCanvas" width="843" height="276"></canvas>
+        <canvas id="quaiCanvas"   width="843" height="276"></canvas>
+        <canvas id="ppdCanvas"    width="843" height="276"></canvas>
+        <canvas id="ppgCanvas"    width="843" height="276"></canvas>
+        <img id="porteGc" src="../src/pte_gc.png" alt="Porte gauche">
+        <img id="porteDr" src="../src/pte_dr.png" alt="Porte droite">
+        <img id="train"   src="../src/TRAIN.png"  alt="Train">
+        <div id="info">
+            <div id="distanceDisplay">--- m</div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <div id="speedControl">
+            <div id="speedSlider">
+                <div id="speedHandle"></div>
+            </div>
+            <div id="speedDisplay">0 km/h</div>
+        </div>
+
+        <!-- Boutons portes : vert au-dessus, rouge en-dessous -->
+        <div class="door-group">
+            <button id="openBtn"  class="btn door-btn" title="Ouvrir portes"></button>
+            <button id="closeBtn" class="btn door-btn" title="Fermer portes"></button>
+        </div>
+
+        <!-- Bouton desserrage freins (intercalé entre portes et FU) -->
+        <button id="brakeBtn" class="btn">Frein</button>
+
+        <!-- Bouton FU -->
+        <button id="fuBtn" class="btn">FU</button>
+    </div>
+</div>
+
+<script>
+// ─── Configuration ────────────────────────────────────────────────────────────
+const CONFIG = {
+    maxSpeed:        80,
+    acceleration:    0.0135,   // km/h par frame, par cran de manette
+    deceleration:    0.9,      // multiplicateur freinage vs accélération
+    // FU = 2 × freinage niveau max (accelLevel 5 × acc × dec × 2)
+    // Niveau max normal : 5 * 0.0135 * 0.9 = 0.06075 par frame
+    // FU : 0.06075 * 2 = 0.1215 par frame
+    fuBrakePerFrame: 5 * 0.0135 * 0.9 * 2,
+    doorAnimTime:    1800,
+    scrollMultiplier: 16.5
+};
+
+// ─── État ────────────────────────────────────────────────────────────────────
+const state = {
+    speed:          0,
+    accelLevel:     0,     // -5 à +5
+    scroll:         0,
+    brakesReleased: false,
+    brakeTimer:     null,
+    hasMoved:       false,
+    doorsOpen:      false,
+    doorsAnimating: false,
+    fuActive:       false,
+    dragging:       false
+};
+
+// ─── DOM ─────────────────────────────────────────────────────────────────────
+const el = {};
+
+function getElements() {
+    ['tunnelCanvas','quaiCanvas','ppgCanvas','ppdCanvas',
+     'speedSlider','speedHandle','speedDisplay','distanceDisplay',
+     'openBtn','closeBtn','fuBtn','brakeBtn',
+     'train','porteDr','porteGc'
+    ].forEach(id => el[id] = document.getElementById(id));
+
+    el.tunnelCtx = el.tunnelCanvas.getContext('2d');
+    el.quaiCtx   = el.quaiCanvas.getContext('2d');
+    el.ppgCtx    = el.ppgCanvas.getContext('2d');
+    el.ppdCtx    = el.ppdCanvas.getContext('2d');
+}
+
+// ─── Images / séquences ───────────────────────────────────────────────────────
+const images    = {};
+const preloaded = {};
+let totalWidth  = 0;
+let widths      = [];
+let stations    = [];
+
+const tunnelSeq = [
+    'inje4c', '4c',
+    ...Array(60).fill('railext'),
+    'ctsci',
+    ...Array(25).fill('railext'),
+    ...Array(2).fill('pont'),
+    ...Array(12).fill('avt_triolo'),
+    ...Array(2).fill('pont'),
+    ...Array(4).fill('avt_triolo'),
+    'triolo',
+    ...Array(2).fill('sortie_triolo'),
+    ...Array(20).fill('rail_tranchee'),
+    ...Array(2).fill('pont'),
+    ...Array(17).fill('rail_tranchee'),
+    ...Array(15).fill('pont'),
+    ...Array(2).fill('pont_autoroute1'),
+    'pont_autoroute2',
+    ...Array(2).fill('entree_tunnel'),
+    ...Array(17).fill('tunnel_classic'),
+    'hoteldeville',
+    ...Array(45).fill('tunnel_classic'),
+    'pontdebois',
+    ...Array(5).fill('tunnel_classic')
+];
+
+const quaiSeq = tunnelSeq.map(t =>
+    ['4c','ctsci','triolo','hoteldeville','pontdebois'].includes(t) ? 'quai' : null
+);
+
+function loadImages() {
+    const toLoad = [
+        ...['inje4c','4c','railext','ctsci','pont','avt_triolo',
+            'triolo','sortie_triolo','rail_tranchee','pont_autoroute1',
+            'pont_autoroute2','entree_tunnel','hoteldeville','pontdebois']
+            .map(n => ({ name: n, src: `../src/stations/${n}.png` })),
+        { name: 'tunnel_classic', src: '../src/tunnel_classic.png' },
+        { name: 'quai', src: '../src/quai.png' },
+        { name: 'ppg',  src: '../src/ppg.png'  },
+        { name: 'ppd',  src: '../src/ppd.png'  }
+    ];
+
+    let loaded = 0;
+    toLoad.forEach(({ name, src }) => {
+        const img = new Image();
+        img.onload = () => {
+            images[name] = img;
+            preloadCanvas(name, img);
+            if (++loaded === toLoad.length) {
+                calculateDimensions();
+                gameLoop();
+            }
+        };
+        img.src = src;
+    });
+}
+
+function preloadCanvas(name, img) {
+    const canvas = document.createElement('canvas');
+    const ctx    = canvas.getContext('2d');
+    if (!['quai','ppg','ppd'].includes(name)) {
+        const scale  = 276 / img.height;
+        canvas.width = img.width * scale;
+        canvas.height = 276;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, canvas.width, 276);
+    } else {
+        canvas.width  = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+    }
+    preloaded[name] = canvas;
+}
+
+function calculateDimensions() {
+    let pos = 0;
+    for (let i = 0; i < tunnelSeq.length; i++) {
+        const img   = images[tunnelSeq[i]];
+        const scale = 276 / img.height;
+        const w     = img.width * scale;
+        widths[i]   = w;
+        if (quaiSeq[i] === 'quai') stations.push(pos + w / 2);
+        pos += w;
+    }
+    totalWidth = pos;
+}
+
+// ─── Sound Manager ────────────────────────────────────────────────────────────
+let soundManager;
+
+// ─── Manette ─────────────────────────────────────────────────────────────────
+function getHandlePos() {
+    return parseFloat(el.speedHandle.style.top || '50');
+}
+
+function setHandlePos(pos) {
+    el.speedHandle.style.top  = pos + '%';
+    el.speedHandle.style.left = '50%';
+}
+
+function snapToGrad(pos) {
+    const grads = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+    return grads.reduce((a, b) => Math.abs(b - pos) < Math.abs(a - pos) ? b : a);
+}
+
+// pos 0 = haut (+5), pos 50 = milieu (0), pos 100 = bas (-5)
+function posToLevel(pos) {
+    return Math.round((50 - pos) / 10);
+}
+
+// ─── Bouton freins ────────────────────────────────────────────────────────────
+
+function releaseBrakes() {
+    if (state.brakesReleased) return;
+    state.brakesReleased = true;
+    state.hasMoved       = false;
+    el.brakeBtn.classList.add('released');
+    soundManager.playBrakeRelease();
+
+    // Si dans les 3 s on n'avance pas → re-serrer
+    clearTimeout(state.brakeTimer);
+    state.brakeTimer = setTimeout(() => {
+        if (state.speed < 1) engageBrakes();
+        state.brakeTimer = null;
+    }, 3000);
+}
+
+function engageBrakes() {
+    if (!state.brakesReleased) return;
+    state.brakesReleased = false;
+    el.brakeBtn.classList.remove('released');
+    soundManager.playBrakeEngage();
+    clearTimeout(state.brakeTimer);
+    state.brakeTimer = null;
+}
+
+// ─── Portes ───────────────────────────────────────────────────────────────────
+
+function openDoors() {
+    if (state.speed !== 0 || state.doorsOpen || state.doorsAnimating) return;
+    soundManager.resume();
+
+    ['porteDr','porteGc','ppgCanvas','ppdCanvas'].forEach(id => {
+        el[id].classList.add('opening');
+        el[id].classList.remove('closing');
+    });
+
+    soundManager.playDoorSound('ouv_prt');
+
+    const mobile  = window.innerWidth <= 900;
+    const dOff    = mobile ? 23 : 34;
+    const pOff    = mobile ? 27 : 40;
+
+    el.porteDr.style.transform   = `translateX(${dOff}px)`;
+    el.porteGc.style.transform   = `translateX(-${dOff}px)`;
+    el.ppgCanvas.style.transform = `translateX(-${pOff}px)`;
+    el.ppdCanvas.style.transform = `translateX(${pOff}px)`;
+
+    state.doorsOpen      = true;
+    state.doorsAnimating = true;
+    setTimeout(() => { state.doorsAnimating = false; }, CONFIG.doorAnimTime);
+}
+
+function closeDoors() {
+    if (!state.doorsOpen || state.doorsAnimating) return;
+    soundManager.resume();
+
+    const buzzer = soundManager.playDoorSound('buzzer');
+    buzzer.onended = () => {
+        soundManager.playDoorSound('fer_prt');
+
+        ['porteDr','porteGc','ppgCanvas','ppdCanvas'].forEach(id => {
+            el[id].classList.add('closing');
+            el[id].classList.remove('opening');
+        });
+
+        el.porteDr.style.transform   = 'translateX(0)';
+        el.porteGc.style.transform   = 'translateX(0)';
+        el.ppgCanvas.style.transform = 'translateX(0)';
+        el.ppdCanvas.style.transform = 'translateX(0)';
+
+        state.doorsOpen      = false;
+        state.doorsAnimating = true;
+        setTimeout(() => {
+            state.doorsAnimating = false;
+            ['porteDr','porteGc','ppgCanvas','ppdCanvas'].forEach(id => {
+                el[id].classList.remove('closing');
+            });
+        }, 2000);
+
+        buzzer.onended = null;
+    };
+}
+
+// ─── FU ───────────────────────────────────────────────────────────────────────
+
+function emergencyStop() {
+    if (state.fuActive) return;
+    soundManager.resume();
+    state.fuActive = true;
+
+    // Manette forcée niveau 5 bas (bougeable mais inoffensive)
+    setHandlePos(100);
+    state.accelLevel = -5;
+    el.fuBtn.classList.add('active');
+
+    soundManager.triggerFU(state.speed);
+}
+
+// ─── Physique ─────────────────────────────────────────────────────────────────
+
+function updateSpeed() {
+    if (state.fuActive) {
+        // FU = 2× freinage niveau max
+        state.speed = Math.max(0, state.speed - CONFIG.fuBrakePerFrame);
+
+        if (state.speed === 0) {
+            state.fuActive = false;
+            el.fuBtn.classList.remove('active');
+            soundManager.onFUStop();
+            // À l'arrêt après FU : re-serrer les freins (obliger à recliquer)
+            engageBrakes();
+        }
+
+    } else if (state.brakesReleased && !state.doorsOpen) {
+        const lv = state.accelLevel;
+        if (lv > 0) {
+            state.speed = Math.min(CONFIG.maxSpeed, state.speed + lv * CONFIG.acceleration);
+        } else if (lv < 0) {
+            const power = (lv === -5)
+                ? Math.abs(lv) * CONFIG.acceleration * CONFIG.deceleration * (CONFIG.level5Multiplier || 1.5)
+                : Math.abs(lv) * CONFIG.acceleration * CONFIG.deceleration;
+            state.speed = Math.max(0, state.speed - power);
+        }
+        // Annuler le timer dès que le train bouge, quelle que soit la position de la manette
+        if (state.speed >= 1 && state.brakeTimer !== null) {
+            clearTimeout(state.brakeTimer);
+            state.brakeTimer = null;
+        }
+        // Mémoriser qu'on a bougé au moins une fois depuis le desserrage
+        if (state.speed >= 1) state.hasMoved = true;
+
+    } else if (!state.brakesReleased && state.speed > 0) {
+        // Freins serrés : légère décélération résiduelle
+        state.speed = Math.max(0, state.speed - 0.05);
+    }
+
+    // Arrêt naturel → re-serrer les freins UNIQUEMENT si on avait déjà bougé
+    // (évite de re-serrer immédiatement après le desserrage à 0 km/h)
+    if (state.speed === 0 && state.brakesReleased && state.hasMoved && !state.fuActive) {
+        engageBrakes();
+    }
+
+    el.speedDisplay.textContent = Math.round(state.speed) + ' km/h';
+
+    // Mettre à jour les sons (accelLevel = 0 si freins serrés)
+    soundManager.update(
+        state.speed,
+        state.brakesReleased ? state.accelLevel : 0,
+        state.brakesReleased
+    );
+}
+
+// ─── Rendu ────────────────────────────────────────────────────────────────────
+
+function draw() {
+    const scrollSpeed = (state.speed / CONFIG.maxSpeed) * CONFIG.scrollMultiplier;
+    state.scroll += scrollSpeed;
+    const offset = state.scroll % totalWidth;
+
+    el.tunnelCtx.clearRect(0, 0, 843, 276);
+    el.quaiCtx.clearRect(0, 0, 843, 276);
+    el.ppdCtx.clearRect(0, 0, 843, 276);
+    el.ppgCtx.clearRect(0, 0, 843, 276);
+
+    for (let cycle = -1; cycle <= 2; cycle++) {
+        let x = cycle * totalWidth - offset;
+        for (let i = 0; i < tunnelSeq.length; i++) {
+            const w = widths[i];
+            if (x + w > -1 && x < 844) {
+                el.tunnelCtx.drawImage(preloaded[tunnelSeq[i]], x, 0, w, 276);
+                if (quaiSeq[i] === 'quai') {
+                    const qh = 276 * 0.66;
+                    const qy = 276 - qh;
+                    el.quaiCtx.drawImage(preloaded.quai, 0, 0, preloaded.quai.width, preloaded.quai.height, x, qy, w, qh);
+                    el.ppdCtx.drawImage(preloaded.ppd,  0, 0, preloaded.ppd.width,  preloaded.ppd.height,  x, qy, w, qh);
+                    el.ppgCtx.drawImage(preloaded.ppg,  0, 0, preloaded.ppg.width,  preloaded.ppg.height,  x, qy, w, qh);
+                }
+            }
+            x += w;
+        }
+    }
+
+    const next = getNextStation();
+    el.distanceDisplay.textContent = next ? Math.round(next * 0.0224) + ' m' : '--- m';
+}
+
+function getNextStation() {
+    const offset = state.scroll % totalWidth;
+    let min = Infinity;
+    for (let c = 0; c <= 1; c++) {
+        for (const pos of stations) {
+            const d = c * totalWidth + pos - offset;
+            if (d > 0 && d < min) min = d;
+        }
+    }
+    return min === Infinity ? null : min;
+}
+
+// ─── Boucle ───────────────────────────────────────────────────────────────────
+
+function gameLoop() {
+    updateSpeed();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// ─── Contrôles ───────────────────────────────────────────────────────────────
+
+function setupControls() {
+    const mobile  = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const evStart = mobile ? 'touchstart' : 'mousedown';
+    const evMove  = mobile ? 'touchmove'  : 'mousemove';
+    const evEnd   = mobile ? 'touchend'   : 'mouseup';
+
+    let startY = 0, startHandle = 0;
+
+    el.speedHandle.addEventListener(evStart, e => {
+        state.dragging = true;
+        const ev = e.touches ? e.touches[0] : e;
+        startY      = ev.clientY;
+        startHandle = getHandlePos();
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener(evMove, e => {
+        if (!state.dragging) return;
+        const ev    = e.touches ? e.touches[0] : e;
+        const delta = ev.clientY - startY;
+        const h     = el.speedSlider.offsetHeight;
+        let pos     = startHandle + (delta / h) * 100;
+        pos         = Math.max(0, Math.min(100, pos));
+        setHandlePos(pos);
+        state.accelLevel = posToLevel(pos);
+        e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener(evEnd, () => {
+        if (!state.dragging) return;
+        state.dragging   = false;
+        const pos        = snapToGrad(getHandlePos());
+        setHandlePos(pos);
+        state.accelLevel = posToLevel(pos);
+    });
+
+    el.brakeBtn.addEventListener('click', releaseBrakes);
+    el.openBtn.addEventListener('click', openDoors);
+    el.closeBtn.addEventListener('click', closeDoors);
+    el.fuBtn.addEventListener('click', emergencyStop);
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'o' || e.key === 'O') openDoors();
+        if (e.key === 'f' || e.key === 'F') closeDoors();
+        if (e.key === 'x' || e.key === 'X') emergencyStop();
+    });
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+function init() {
+    getElements();
+    soundManager = new MetroSoundManager();
+    setHandlePos(50);   // manette au centre (niveau 0)
+    loadImages();
+    setupControls();
+}
+
+init();
+</script>
+</body>
+</html>
