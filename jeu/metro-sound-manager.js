@@ -9,6 +9,7 @@ class MetroSoundManager {
         this.finHachPlayed   = false;
         this.pshitStopPlayed = false;
         this.fuActive        = false;
+        this._blockBrakeEngage = false;
 
         this._hacheurType  = null;
         this._arretFUAudio = null;
@@ -149,6 +150,10 @@ class MetroSoundManager {
     }
 
     playBrakeEngage() {
+        if (this._blockBrakeEngage) {
+            this._blockBrakeEngage = false;
+            return;
+        }
         this._playOnce('pshit', 0.5);
     }
 
@@ -156,24 +161,27 @@ class MetroSoundManager {
 
     triggerFU(speed) {
         this.fuActive        = true;
-        this.pshitStopPlayed = true;   // bloquer pshit à l'arrêt FU
-        this.finHachPlayed   = true;   // bloquer fin_hach aussi
+        this.pshitStopPlayed = true;
+        this._blockBrakeEngage = true;   // bloquer le pshit de engageBrakes après FU
+        this.finHachPlayed   = true;
         this._stopHacheur();
         this._stopBip();
         this._stopLoop('30');
         this._stopLoop('50');
         this._stopLoop('70');
 
-        if (speed >= 20) {
-            const a = this._playOnce('FU', 0.5);
-            if (a) {
-                a.onended = () => {
-                    this._arretFUAudio = this._playOnce('ArretFU');
-                    a.onended = null;
-                };
+        if (speed > 0) {
+            if (speed >= 20) {
+                const a = this._playOnce('FU', 0.5);
+                if (a) {
+                    a.onended = () => {
+                        this._arretFUAudio = this._playOnce('ArretFU');
+                        a.onended = null;
+                    };
+                }
+            } else {
+                this._playOnce('FU', 0.5);
             }
-        } else {
-            this._playOnce('FU', 0.5);
         }
     }
 
@@ -183,6 +191,7 @@ class MetroSoundManager {
             this._arretFUAudio.currentTime = 0;
             this._arretFUAudio = null;
         }
+        this.pshitStopPlayed = true;  // bloquer pshit à l'arrêt après FU
         this.fuActive = false;
     }
 
