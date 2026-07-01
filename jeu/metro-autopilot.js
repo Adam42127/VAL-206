@@ -119,13 +119,18 @@ class MetroAutopilot {
             // ── FU initial : attendre arrêt complet ──────────────────────────
             case 'EMERGENCY':
                 if (spd === 0 && !state.fuActive) {
-                    // Ouverture autorisée uniquement si on est dans ±1m du point d'arrêt
-                    if (dist !== null && dist <= 1) {
+                    if (dist !== null && dist <= 1 && dist >= -0.5) {
+                        // Dans la zone d'arrêt → ouvrir les portes
                         this._setState('AT_STATION');
                         this._startDoorSequence();
+                    } else if (dist !== null && dist > 1 && dist < 15) {
+                        // Arrêté juste avant la station → avancer doucement
+                        this._setState('CREEPING');
+                        releaseBrakes();
                     } else {
-                        // Hors station → choisir vitesse et partir
+                        // Hors station (dist > 15m ou dépassé) → repartir
                         this._cruiseSpeed = this._chooseCruiseSpeed(dist);
+                        this._stopOffset  = (Math.random() * 2 - 1);
                         this._setState('RELEASING_BRAKES');
                         releaseBrakes();
                         this._timer = setTimeout(() => {
@@ -133,6 +138,30 @@ class MetroAutopilot {
                             this._setState('ACCELERATING');
                         }, 1000);
                     }
+                }
+                break;
+
+            // ── Avance lente pour alignement ─────────────────────────────────
+            case 'CREEPING':
+                if (dist !== null && dist <= 1 && dist >= -0.5) {
+                    // Bien aligné → stopper et ouvrir
+                    this._setHandle(0);
+                    emergencyStop();
+                    this._setState('AT_STATION');
+                    this._timer = setTimeout(() => this._startDoorSequence(), 600);
+                    break;
+                }
+                if (dist !== null && dist < -0.5) {
+                    // Dépassé en creeping → FU et continuer à la suivante
+                    emergencyStop();
+                    this._setState('EMERGENCY');
+                    break;
+                }
+                // Avancer doucement, max 5 km/h (freins déjà desserrés)
+                if (spd < 5) {
+                    this._setHandle(1);
+                } else {
+                    this._setHandle(0);
                 }
                 break;
 
@@ -146,8 +175,8 @@ class MetroAutopilot {
 
             // ── Accélération ─────────────────────────────────────────────────
             case 'ACCELERATING':
-                // Vérifier si on doit déjà freiner (station proche)
-                if (dist !== null) {
+                // Vérifier si on doit déjà freiner (station proche) — seulement au-dessus de 20 km/h
+                if (spd > 20 && dist !== null) {
                     const brakeDist = this._estimateBrakingDistance(spd, 5) * 1.10;
                     if (dist - this._stopOffset <= brakeDist) {
                         this._setHandle(-5);
@@ -163,7 +192,7 @@ class MetroAutopilot {
 
             // ── Croisière : surveiller le moment de freiner ──────────────────
             case 'CRUISING':
-                if (dist !== null) {
+                if (spd > 20 && dist !== null) {
                     // Déclencher le freinage quand la distance restante ≤ distance d'arrêt à -5
                     // + 10% de marge de sécurité pour ne pas arriver à court
                     const brakeDist = this._estimateBrakingDistance(spd, 5) * 1.10;
@@ -183,13 +212,19 @@ class MetroAutopilot {
             case 'BRAKING': {
                 if (spd === 0) {
                     this._setHandle(0);
-                    this._setState('AT_STATION');
-                    this._startDoorSequence();
+                    this._setState('EMERGENCY');
                     break;
                 }
 
                 if (dist !== null) {
-                    // Distance effective jusqu'au point d'arrêt cible (avec décalage aléatoire)
+                    // FU préventif si même à -5 on va dépasser de plus de 0.5m
+                    const d5 = this._estimateBrakingDistance(spd, 5);
+                    if (d5 > dist + 0.5) {
+                        emergencyStop();
+                        this._setState('EMERGENCY');
+                        break;
+                    }
+
                     const eDist = Math.max(0, dist - this._stopOffset);
                     const optLevel = this._getOptimalBrakeLevel(spd, eDist);
                     this._setHandle(-optLevel);
@@ -233,7 +268,6 @@ class MetroAutopilot {
 
     _afterDoorsClose() {
         this._setState('RELEASING_BRAKES');
-        releaseBrakes();
 
         // Choisir la vitesse et le décalage d'arrêt pour la prochaine interstation
         const rawDist = getNextStation();
@@ -243,9 +277,13 @@ class MetroAutopilot {
 
         console.log(`[AUTO] Prochain arrêt : croisière ${this._cruiseSpeed} km/h, offset ${this._stopOffset.toFixed(2)} m`);
 
+        // Attendre 1s après la fin de fer_prt avant de desserrer et repartir
         this._timer = setTimeout(() => {
-            this._setHandle(5);
-            this._setState('ACCELERATING');
+            releaseBrakes();
+            this._timer = setTimeout(() => {
+                this._setHandle(5);
+                this._setState('ACCELERATING');
+            }, 1000);
         }, 1000);
     }
 
