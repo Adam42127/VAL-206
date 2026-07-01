@@ -44,13 +44,25 @@
         #ppgCanvas  { z-index: 16; transition: transform 1.8s linear; }
         #ppdCanvas  { z-index: 15; transition: transform 1.8s linear; }
 
-        #ppgCanvas.closing, #ppdCanvas.closing, #porteDr.closing, #porteGc.closing {
-            transition: transform 2.2s cubic-bezier(0.5, 0.5, 0.5, 0.7);
+        #porteDr.closing, #porteGc.closing {
+            transition: transform 2s cubic-bezier(0.5, 0.5, 0.5, 0.7);
         }
-        #ppgCanvas.opening, #ppdCanvas.opening, #porteDr.opening, #porteGc.opening {
+        #porteDr.opening, #porteGc.opening {
             transition: transform 1.8s cubic-bezier(0.5, 0.9, 0.8, 1.0);
         }
-        #porteDr, #porteGc {
+        
+	#ppgCanvas.closing, #ppdCanvas.closing {
+            transition: transform 2.5s cubic-bezier(0.5, 0.5, 0.5, 0.7);
+        }
+	
+	#ppgCanvas.opening, #ppdCanvas.opening {
+            transition: transform 2.5s cubic-bezier(0.5, 0.9, 0.8, 1.0);
+        }
+
+
+
+	
+	#porteDr, #porteGc {
             z-index: 11;
             position: absolute;
             bottom: 12px; left: 0;
