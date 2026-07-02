@@ -59,10 +59,7 @@
             transition: transform 2.5s cubic-bezier(0.5, 0.9, 0.8, 1.0);
         }
 
-
-
-	
-	#porteDr, #porteGc {
+        #porteDr, #porteGc {
             z-index: 11;
             position: absolute;
             bottom: 12px; left: 0;
@@ -284,16 +281,18 @@ let totalWidth  = 0;
 let widths      = [];
 let stations    = [];
 
+const STATION_NAMES = ['4c','ctsci','triolo','hoteldeville','pontdebois'];
+
 const tunnelSeq = [
-    'inje4c', '4c',
+    'inje4c', '4c', '4c',
     ...Array(60).fill('railext'),
-    'ctsci',
+    'ctsci', 'ctsci',
     ...Array(25).fill('railext'),
     ...Array(2).fill('pont'),
     ...Array(12).fill('avt_triolo'),
     ...Array(2).fill('pont'),
     ...Array(4).fill('avt_triolo'),
-    'triolo',
+    'triolo', 'triolo',
     ...Array(2).fill('sortie_triolo'),
     ...Array(20).fill('rail_tranchee'),
     ...Array(2).fill('pont'),
@@ -303,15 +302,33 @@ const tunnelSeq = [
     'pont_autoroute2',
     ...Array(2).fill('entree_tunnel'),
     ...Array(17).fill('tunnel_classic'),
-    'hoteldeville',
+    'hoteldeville', 'hoteldeville',
     ...Array(45).fill('tunnel_classic'),
-    'pontdebois',
+    'pontdebois', 'pontdebois',
     ...Array(5).fill('tunnel_classic')
 ];
 
-const quaiSeq = tunnelSeq.map(t =>
-    ['4c','ctsci','triolo','hoteldeville','pontdebois'].includes(t) ? 'quai' : null
-);
+// Pour chaque case de tunnelSeq, on construit quaiSeq :
+// - 1ère occurrence d'une station → 'quai_first'  (1er demi-quai)
+// - 2e occurrence consécutive     → 'quai_second' (2e demi-quai)
+// La transition est insérée virtuellement entre les deux dans le rendu (pas dans tunnelSeq)
+const quaiSeq = (() => {
+    const result = [];
+    for (let i = 0; i < tunnelSeq.length; i++) {
+        const t = tunnelSeq[i];
+        if (STATION_NAMES.includes(t)) {
+            const prev = tunnelSeq[i - 1];
+            if (prev === t) {
+                result.push('quai_second');
+            } else {
+                result.push('quai_first');
+            }
+        } else {
+            result.push(null);
+        }
+    }
+    return result;
+})();
 
 function loadImages() {
     const toLoad = [
@@ -319,10 +336,11 @@ function loadImages() {
             'triolo','sortie_triolo','rail_tranchee','pont_autoroute1',
             'pont_autoroute2','entree_tunnel','hoteldeville','pontdebois']
             .map(n => ({ name: n, src: `../src/stations/${n}.png` })),
-        { name: 'tunnel_classic', src: '../src/tunnel_classic.png' },
-        { name: 'quai', src: '../src/quai.png' },
-        { name: 'ppg',  src: '../src/ppg.png'  },
-        { name: 'ppd',  src: '../src/ppd.png'  }
+        { name: 'tunnel_classic',  src: '../src/tunnel_classic.png' },
+        { name: 'quai',            src: '../src/quai.png' },
+        { name: 'ppg',             src: '../src/ppg.png'  },
+        { name: 'ppd',             src: '../src/ppd.png'  },
+        { name: 'transition_quai', src: '../src/stations/transition_quai.png' }
     ];
 
     let loaded = 0;
@@ -343,7 +361,7 @@ function loadImages() {
 function preloadCanvas(name, img) {
     const canvas = document.createElement('canvas');
     const ctx    = canvas.getContext('2d');
-    if (!['quai','ppg','ppd'].includes(name)) {
+    if (!['quai','ppg','ppd','transition_quai'].includes(name)) {
         const scale  = 276 / img.height;
         canvas.width = img.width * scale;
         canvas.height = 276;
@@ -358,13 +376,16 @@ function preloadCanvas(name, img) {
 }
 
 function calculateDimensions() {
+    const qh = 276 * 0.66;
+    const tw = preloaded.transition_quai.width * (qh / preloaded.transition_quai.height);
     let pos = 0;
     for (let i = 0; i < tunnelSeq.length; i++) {
         const img   = images[tunnelSeq[i]];
         const scale = 276 / img.height;
         const w     = img.width * scale;
         widths[i]   = w;
-        if (quaiSeq[i] === 'quai') stations.push(pos + w / 2);
+        // Point de référence = fin du quai_second (bord droit + décalage transition)
+        if (quaiSeq[i] === 'quai_second') stations.push(pos + w + tw / 2 - 12.5 / 0.0224);
         pos += w;
     }
     totalWidth = pos;
@@ -564,12 +585,31 @@ function draw() {
             const w = widths[i];
             if (x + w > -1 && x < 844) {
                 el.tunnelCtx.drawImage(preloaded[tunnelSeq[i]], x, 0, w, 276);
-                if (quaiSeq[i] === 'quai') {
-                    const qh = 276 * 0.66;
-                    const qy = 276 - qh;
-                    el.quaiCtx.drawImage(preloaded.quai, 0, 0, preloaded.quai.width, preloaded.quai.height, x, qy, w, qh);
-                    el.ppdCtx.drawImage(preloaded.ppd,  0, 0, preloaded.ppd.width,  preloaded.ppd.height,  x, qy, w, qh);
-                    el.ppgCtx.drawImage(preloaded.ppg,  0, 0, preloaded.ppg.width,  preloaded.ppg.height,  x, qy, w, qh);
+
+                const qh = 276 * 0.66;
+                const qy = 276 - qh;
+
+                if (quaiSeq[i] === 'quai_first') {
+                    // 1er demi-quai : décalé vers la gauche de la moitié de la transition
+                    const tw = preloaded.transition_quai.width * (qh / preloaded.transition_quai.height);
+                    const shift = tw / 2;
+                    el.quaiCtx.drawImage(preloaded.quai, 0, 0, preloaded.quai.width, preloaded.quai.height, x - shift, qy, w, qh);
+                    el.ppdCtx.drawImage(preloaded.ppd,   0, 0, preloaded.ppd.width,  preloaded.ppd.height,  x - shift, qy, w, qh);
+                    el.ppgCtx.drawImage(preloaded.ppg,   0, 0, preloaded.ppg.width,  preloaded.ppg.height,  x - shift, qy, w, qh);
+
+                } else if (quaiSeq[i] === 'quai_second') {
+                    // Insérer la transition juste avant ce 2e quai
+                    const tw = preloaded.transition_quai.width * (qh / preloaded.transition_quai.height);
+                    const shift = tw / 2;
+                    const tx = x - shift; // centré entre les deux quais
+                    el.quaiCtx.drawImage(preloaded.transition_quai, 0, 0, preloaded.transition_quai.width, preloaded.transition_quai.height, tx, qy, tw, qh);
+                    el.ppdCtx.drawImage(preloaded.transition_quai,  0, 0, preloaded.transition_quai.width, preloaded.transition_quai.height, tx, qy, tw, qh);
+                    el.ppgCtx.drawImage(preloaded.transition_quai,  0, 0, preloaded.transition_quai.width, preloaded.transition_quai.height, tx, qy, tw, qh);
+
+                    // 2e demi-quai : décalé vers la droite de la moitié de la transition
+                    el.quaiCtx.drawImage(preloaded.quai, 0, 0, preloaded.quai.width, preloaded.quai.height, x + shift, qy, w, qh);
+                    el.ppdCtx.drawImage(preloaded.ppd,   0, 0, preloaded.ppd.width,  preloaded.ppd.height,  x + shift, qy, w, qh);
+                    el.ppgCtx.drawImage(preloaded.ppg,   0, 0, preloaded.ppg.width,  preloaded.ppg.height,  x + shift, qy, w, qh);
                 }
             }
             x += w;
