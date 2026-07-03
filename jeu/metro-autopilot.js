@@ -1,7 +1,6 @@
-// ─── metro-autopilot.js ──────────────────────────────────────────────────────
-// Pilote automatique pour ValADAM
-// À inclure dans index.html APRÈS metro-sound-manager.js :
-//   <script src="metro-autopilot.js"></script>
+// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────── metro-autopilot.js ─────────────────────────────────────────
+// ─────────── Pilote automatique pour ValADAM ─────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 
 class MetroAutopilot {
@@ -14,7 +13,8 @@ class MetroAutopilot {
         this._cruiseSpeed   = 70;    // vitesse de croisière choisie à chaque interstation
         this._ppTarget             = 0;
         this._wasStoppingAtStation = false;
-        this._lastDist             = null; // dernière distance connue avant basculement
+        this._lastDist             = null;
+        this._passedZero           = false;
         this._loop          = this._loop.bind(this);
     }
 
@@ -80,7 +80,7 @@ class MetroAutopilot {
         this._setButtonState(true);
         this._lockControls(true);
         const d = this._lastDist;
-        if (d !== null && d <= 1.10 && d >= -1.00) {
+        if (d !== null && d <= 1.10 && d >= -3.00) {
             this._wasStoppingAtStation = true;
         }
         emergencyStop();
@@ -118,6 +118,8 @@ class MetroAutopilot {
         const rawDist = getNextStation();
         const dist    = rawDist !== null ? rawDist * 0.0224 : null;
         if (dist !== null && dist < 200) this._lastDist = dist;
+        if (dist !== null && dist > 0.8) this._lastDist = null;
+        if (this._state === 'PP_ZONE' && dist !== null && dist <= 0.1) this._passedZero = true;
         if (!this.active) return; // mémoriser tant que proche
 
         switch (this._state) {
@@ -125,11 +127,20 @@ class MetroAutopilot {
             // ── FU initial : attendre arrêt complet ──────────────────────────
             case 'EMERGENCY':
                 if (spd === 0 && !state.fuActive) {
-                    if (this._wasStoppingAtStation || (dist !== null && dist <= 1.10 && dist >= -1.00)) {
-                        // Était en train de s'arrêter en station → ouvrir les portes
+                    const inPP = this._lastDist !== null
+                        ? (this._lastDist <= 1.10 && this._lastDist >= -3.00)
+                        : (dist !== null && dist <= 1.10 && dist >= -3.00);
+
+                    if (inPP) {
                         this._wasStoppingAtStation = false;
+                        this._passedZero = false;
                         this._setState('AT_STATION');
                         this._startDoorSequence();
+                    } else if (this._wasStoppingAtStation && dist !== null && dist < 50) {
+                        // Arrêté hors zone PP après FU → recalage CREEPING
+                        this._wasStoppingAtStation = false;
+                        this._setState('CREEPING');
+                        releaseBrakes();
                     } else if (dist !== null && dist > 1.10 && dist < 15) {
                         this._setState('CREEPING');
                         releaseBrakes();
@@ -147,23 +158,18 @@ class MetroAutopilot {
                 }
                 break;
 
-            // ── Avance lente pour alignement ─────────────────────────────────
             case 'CREEPING':
-                if (dist !== null && dist <= 1.10 && dist >= -1.00) {
-                    // Bien aligné → stopper et ouvrir
-                    this._setHandle(0);
-                    emergencyStop();
-                    this._setState('AT_STATION');
-                    this._timer = setTimeout(() => this._startDoorSequence(), 600);
+                if (dist !== null && dist <= 0.90) {
+                    // Entré dans la zone → basculer en PP_ZONE
+                    this._passedZero = false;
+                    this._setState('PP_ZONE');
                     break;
                 }
-                if (dist !== null && dist < -1.00) {
-                    // Dépassé en creeping → FU et continuer à la suivante
+                if (dist !== null && dist < -3.00) {
                     emergencyStop();
                     this._setState('EMERGENCY');
                     break;
                 }
-                // Avancer doucement, max 5 km/h (freins déjà desserrés)
                 if (spd < 5) {
                     this._setHandle(1);
                 } else {
@@ -183,7 +189,7 @@ class MetroAutopilot {
             case 'ACCELERATING':
                 if (spd > 5 && dist !== null) {
                     const brakeDist = this._estimateBrakingDistance(spd, 5);
-                    if (dist - 1.10 <= brakeDist) {
+                    if (dist - 0.90 <= brakeDist) {
                         this._wasStoppingAtStation = true;
                         this._setHandle(-5);
                         this._setState('BRAKING');
@@ -199,7 +205,7 @@ class MetroAutopilot {
             case 'CRUISING':
                 if (spd > 5 && dist !== null) {
                     const brakeDist = this._estimateBrakingDistance(spd, 5);
-                    if (dist - 1.10 <= brakeDist) {
+                    if (dist - 0.90 <= brakeDist) {
                         this._wasStoppingAtStation = true;
                         this._setHandle(-5);
                         this._setState('BRAKING');
@@ -219,8 +225,7 @@ class MetroAutopilot {
                     break;
                 }
                 if (dist !== null) {
-                    if (dist <= 1.10) {
-                        this._ppTarget = -1.00 + Math.random() * (1.10 + 3.00);
+                    if (dist <= 0.90) {
                         this._setState('PP_ZONE');
                     } else {
                         this._setHandle(-5);
@@ -231,13 +236,18 @@ class MetroAutopilot {
 
             case 'PP_ZONE': {
                 if (spd === 0) {
+                    this._passedZero = false;
                     this._setHandle(0);
                     this._setState('AT_STATION');
                     this._startDoorSequence();
                     break;
                 }
-                if (dist !== null && dist < -1.00) {
+                if (dist !== null && dist < -3.00) {
                     this._setHandle(-6);
+                } else if (this._passedZero) {
+                    this._setHandle(-5);
+                } else if (spd <= 1.5) {
+                    this._setHandle(0);
                 } else {
                     this._setHandle(-5);
                 }
@@ -347,18 +357,7 @@ class MetroAutopilot {
      * Choisit intelligemment la vitesse de croisière selon la distance.
      */
     _chooseCruiseSpeed(distMeters) {
-        const jitter = Math.round((Math.random() - 0.5) * 6); // ±3 km/h
-        let base;
-        if (distMeters === null || distMeters > 700) {
-            base = 74;
-        } else if (distMeters > 500) {
-            base = 70;
-        } else if (distMeters > 300) {
-            base = 65;
-        } else {
-            base = 61;
-        }
-        return Math.min(75, Math.max(60, base + jitter));
+        return 75;
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
