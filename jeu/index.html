@@ -281,31 +281,43 @@ let totalWidth  = 0;
 let widths      = [];
 let stations    = [];
 
-const STATION_NAMES = ['4c','ctsci','triolo','hoteldeville','pontdebois'];
+const STATION_NAMES = ['4c','ctsci','triolo','hoteldeville','pontdebois','sqfl','hlm','marbrerie','fives','caulier','glf'];
 
 const tunnelSeq = [
     'inje4c', '4c', '4c',
-    ...Array(60).fill('railext'),
+    ...Array(50).fill('railext'),
     'ctsci', 'ctsci',
-    ...Array(25).fill('railext'),
+    ...Array(20).fill('railext'),
     ...Array(2).fill('pont'),
     ...Array(12).fill('avt_triolo'),
     ...Array(2).fill('pont'),
     ...Array(4).fill('avt_triolo'),
     'triolo', 'triolo',
     ...Array(2).fill('sortie_triolo'),
-    ...Array(20).fill('rail_tranchee'),
+    ...Array(14).fill('rail_tranchee'),
     ...Array(2).fill('pont'),
-    ...Array(17).fill('rail_tranchee'),
-    ...Array(15).fill('pont'),
+    ...Array(15).fill('rail_tranchee'),
+    ...Array(10).fill('pont'),
     ...Array(2).fill('pont_autoroute1'),
     'pont_autoroute2',
     ...Array(2).fill('entree_tunnel'),
-    ...Array(17).fill('tunnel_classic'),
+    ...Array(10).fill('tunnel_classic'),
     'hoteldeville', 'hoteldeville',
-    ...Array(45).fill('tunnel_classic'),
+    ...Array(35).fill('tunnel_classic'),
     'pontdebois', 'pontdebois',
-    ...Array(5).fill('tunnel_classic')
+    ...Array(50).fill('tunnel_classic'),
+    'sqfl', 'sqfl',
+    ...Array(30).fill('tunnel_classic'),
+    'hlm', 'hlm',
+    ...Array(60).fill('tunnel_classic'),
+    'marbrerie', 'marbrerie',
+    ...Array(40).fill('tunnel_classic'),
+    'fives', 'fives',
+    ...Array(40).fill('tunnel_classic'),
+    'caulier', 'caulier',
+    ...Array(75).fill('tunnel_classic'),
+    'glf', 'glf',
+    ...Array(10).fill('tunnel_classic')
 ];
 
 // Pour chaque case de tunnelSeq, on construit quaiSeq :
@@ -334,7 +346,8 @@ function loadImages() {
     const toLoad = [
         ...['inje4c','4c','railext','ctsci','pont','avt_triolo',
             'triolo','sortie_triolo','rail_tranchee','pont_autoroute1',
-            'pont_autoroute2','entree_tunnel','hoteldeville','pontdebois']
+            'pont_autoroute2','entree_tunnel','hoteldeville','pontdebois',
+            'sqfl','hlm','marbrerie','fives','caulier','glf']
             .map(n => ({ name: n, src: `../src/stations/${n}.png` })),
         { name: 'tunnel_classic',  src: '../src/tunnel_classic.png' },
         { name: 'quai',            src: '../src/quai.png' },
